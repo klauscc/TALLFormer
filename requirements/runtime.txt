@@ -1,0 +1,7 @@
+addict
+imagecorruptions
+opencv-python
+pyyaml
+terminaltables
+torchvision>=0.7.0
+yapf
