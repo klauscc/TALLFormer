@@ -159,6 +159,15 @@ if __name__ == "__main__":
                 ],
             ),
             make_cuda_ext(
+                name="boundary_max_pooling_cuda",
+                module="AFSD.prop_pooling",
+                sources=[],
+                sources_cuda=[
+                    "boundary_max_pooling_cuda.cpp",
+                    "boundary_max_pooling_kernel.cu",
+                ],
+            ),
+            make_cuda_ext(
                 name="deform_pool_ext",
                 module="vedacore.ops.dcn",
                 sources=["src/deform_pool_ext.cpp"],

@@ -5,6 +5,9 @@ This is the offical pyTorch implementation of our ECCV 2022 paper
 Temporal action localization takes hundreds of frames as input. End-to-end training on this task requires huge GPU memory (>32 GB). This issue becomes even worse with the recent video transformer models, many of which have quadratic memory complexity. To address these issues, we propose TALLFormer, a memory-efficient and end-to-end trainable Temporal Action Localization Transformer with Long-term memory. Our long-term memory mechanism eliminates the need for processing hundreds of redundant video frames during each training iteration, thus, significantly reducing the GPU memory consumption and training time.
 TALLFormer outperforms previous state-of-the-arts by a large margin, achieving an average mAP of 59.1% on THUMOS14 and 35.6% on ActivityNet-1.3.
 
+#### Change logs
+- 2023-01-03: release code for ActivityNet.See Section [ANet](#anet) below.
+
 ## Installation
 
 Our code is built on [vedatad](https://github.com/Media-Smart/vedatad). Many Thanks! 
@@ -50,9 +53,9 @@ pip install -r requirements/build.txt
 pip install -v -e .
 ```
 
-## Data preparation
+## Reproduce results on THUMOS14
 
-### THUMOS14
+### Prepare Data
 
 a. Download datasets & Create annotations
 
@@ -79,9 +82,9 @@ Our model use FPS=15 and spatial resolution `256x256`.
 ./tools/data/extract_frames.sh data/thumos14/videos/test data/thumos14/frames_15fps_256x256/test -vf fps=15 -s 256x256 %05d.png
 ```
 
-## Train
+### Train
 
-### a. Download pretrained weights
+#### a. Download pretrained weights
 
 Download weights and place into directory `./data/pretrained_weights/vswin`
 ``` sh
@@ -105,7 +108,7 @@ python ./tools/convert_vswin_ckpt.py --src ./data/pretrained_models/vswin/swin_b
 
 ```
 
-### b. Init the memory-bank
+#### b. Init the memory-bank
 We first extract the features of the training set and save it to a file (memory-bank).
 During training, our model will load and update this memory-bank.
 
@@ -115,7 +118,7 @@ python ./tools/data/extract_features.py --config swin_b_15fps_256x256
 ```
 The files will be saved to directory `data/thumos14/memory_mechanism/feat_swinb_15fps_256x256_crop224x224/`.
 
-### c. train and test
+#### c. train and evaluation
 
 ``` sh
 
@@ -143,6 +146,93 @@ for epoch in 600 700 800 900 1000; do
 done
 
 ```
+
+<a id="anet"></a>
+### Reproduce results on ActivityNet
+
+### 1. preprocess dataset.
+Convert videos to resolution 256x256 and 768 frames no matter how long each video is.
+``` sh
+res=256x256
+thread_num=8
+python3 vedatad/tools/data/anet/transform_videos.py --output_dir data/anet/videos_$res \
+    --resolution $res $thread_num
+```
+
+### 2. download pretrained weights.
+Download weights and place into directory `./data/pretrained_weights/vswin`
+```
+mkdir -p ./data/pretrained_models/vswin
+
+# vswin-B
+wget https://github.com/SwinTransformer/storage/releases/download/v1.0.4/swin_base_patch244_window877_kinetics600_22k.pth -P ./data/pretrained_models/vswin
+
+# convert the ckpt to the format that our code can accept.
+python ./tools/convert_vswin_ckpt.py --src ./data/pretrained_models/vswin/swin_base_patch244_window877_kinetics600_22k.pth
+
+```
+
+### 3. init memory bank.
+``` sh
+python vedatad/tools/data/anet/extract_features.py \
+    --video_dir data/anet/videos_256x256 \
+    --output_dir data/anet/memory_mechanism/feat_swinb_k600_256x256_768frames \
+    --model swin_b \
+    --crop_size 224
+```
+
+### 4. train
+```sh
+export MASTER_ADDR=localhost
+export MASTER_PORT=12443 # any unused port.
+
+expid=1.0.0
+# make sure the expid in the additional_config file matches the expid here.
+additional_config=AFSD/anet_video_cls/configs/membank/$expid.py
+
+config=AFSD/anet_video_cls/configs/anet_256_mp4.yaml
+ckpt_path=workdir/tallformer/anet/${expid}
+
+# copy memory bank to a temporary directory.
+membank_dir=data/tmp/anet/memory_mechanism/${expid}
+mkdir -p $membank_dir
+cp -r data/anet/memory_mechanism/feat_swinb_k600_256x256_768frames $membank_dir
+
+# do training
+python3 AFSD/anet_video_cls/membank/train_membank.py $config --lw=1 --cw=1 --piou=0.6 --ssl 0. \
+    --checkpoint_path $ckpt_path --addi_config $additional_config \
+    --learning_rate 1e-4 \
+    --batch_size 1 \
+    --ngpu 4
+```
+
+### 5. evaluation
+
+```
+# testing
+expid=1.0.0
+ckpt_path=workdir/tallformer/anet/${expid}
+config=AFSD/anet_video_cls/configs/anet_256_mp4.yaml
+additional_config=AFSD/anet_video_cls/configs/membank/${expid}.py
+epoch=10
+# for epoch in `seq 10 -2 3`; do
+    echo "Testing Epoch: $epoch"
+    output_json=${expid}-epoch_${epoch}-anet_rgb.json
+    echo $output_json
+    python3 AFSD/anet_video_cls/test.py $config  --nms_sigma=0.85 --ngpu=4 \
+        --checkpoint_path $ckpt_path/checkpoint-$epoch.ckpt  \
+        --output_json=$output_json \
+        --addi_config $additional_config
+    for classifier in "builtin" "cuhk" "gt"; do
+        output_json=${expid}-epoch_${epoch}-anet_rgb-${classifier}.json
+        python3 AFSD/anet_video_cls/eval.py output/$output_json \
+            --workspace $ckpt_path --epoch ${epoch}_${classifier}
+    done
+done
+
+```
+
+
 
 ## Credits
 

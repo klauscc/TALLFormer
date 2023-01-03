@@ -21,9 +21,7 @@ from vedatad.models.backbones.vswin import SwinTransformer3D
 class ChunkVideoSwin(SwinTransformer3D):
     """extract feature chunk wise"""
 
-    def __init__(
-        self, chunk_size, *args, do_pooling=False, forward_mode="batch", **kwargs
-    ):
+    def __init__(self, chunk_size, *args, do_pooling=False, forward_mode="batch", **kwargs):
         super(ChunkVideoSwin, self).__init__(*args, **kwargs)
         self.chunk_size = chunk_size
 
@@ -52,9 +50,15 @@ class ChunkVideoSwin(SwinTransformer3D):
         if self.forward_mode == "batch":
             return forward_x(x)
         elif self.forward_mode == "split":
+            # split inference to save GPU memory.
             l = x.shape[0]
-            if l == 1:
-                return forward_x(x)
+            if l == 1: # split the temporal dimension.
+                t = x.shape[2]
+                x1 = x[:, :, : t // 2, :, :]
+                x2 = x[:, :, t // 2 :, :, :]
+                x1 = forward_x(x1)
+                x2 = forward_x(x2)
+                return torch.cat([x1, x2], dim=2)
             x1 = x[: l // 2]
             x2 = x[l // 2 :]
             x1 = forward_x(x1)

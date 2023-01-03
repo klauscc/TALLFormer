@@ -1,0 +1,42 @@
+dataset:
+  num_classes: 201
+  training:
+    video_mp4_path: datasets/hacs/videos_256x256_768frames
+    video_info_path: hacs_annotations/HACS_segments_v1.1.1-video_info-train_val.json 
+    video_anno_path: None
+    video_data_path: None
+    clip_length: 768
+    clip_stride: 768
+    crop_size: 224
+  testing:
+    video_mp4_path: datasets/hacs/videos_256x256_768frames
+    video_info_path: hacs_annotations/HACS_segments_v1.1.1-video_info-train_val.json 
+    video_anno_path: None
+    video_data_path: None
+    crop_size: 224
+    clip_length: 768
+    clip_stride: 768
+
+model:
+  in_channels: 3
+  freeze_bn: true
+  freeze_bn_affine: true
+  backbone_model: models/i3d_models/rgb_imagenet.pt
+
+training:
+  batch_size: 1
+  learning_rate: 1e-4
+  weight_decay: 1e-4
+  max_epoch: 15
+  focal_loss: true
+  checkpoint_path: models/anet/
+  random_seed: 2020
+
+testing:
+  conf_thresh: 0.01
+  top_k: 5000
+  nms_thresh: 0.5
+  nms_sigma: 0.85
+  checkpoint_path: models/anet/checkpoint-10.ckpt
+  output_path: output/
+  output_json: detection_results.json
